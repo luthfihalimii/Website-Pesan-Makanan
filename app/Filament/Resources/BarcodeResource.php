@@ -3,21 +3,25 @@
 namespace App\Filament\Resources;
 
 use App\Filament\Resources\BarcodeResource\Pages;
-use App\Filament\Resources\BarcodeResource\RelationManagers;
 use App\Models\Barcode;
 use Filament\Forms;
 use Filament\Forms\Form;
 use Filament\Resources\Resource;
 use Filament\Tables;
 use Filament\Tables\Table;
-use Illuminate\Database\Eloquent\Builder;
-use Illuminate\Database\Eloquent\SoftDeletingScope;
+use Illuminate\Database\Eloquent\Model;
 
 class BarcodeResource extends Resource
 {
     protected static ?string $model = Barcode::class;
 
-    protected static ?string $navigationIcon = 'heroicon-o-rectangle-stack';
+    protected static ?string $navigationIcon = 'heroicon-o-qr-code';
+    protected static ?string $navigationLabel = 'QR Codes';
+
+    public static function canEdit(Model $record): bool
+    {
+        return false;
+    }
 
     public static function form(Form $form): Form
     {
@@ -25,16 +29,14 @@ class BarcodeResource extends Resource
             ->schema([
                 Forms\Components\TextInput::make('table_number')
                     ->required()
-                    ->maxLength(255),
+                    ->default(fn() => strtoupper(chr(rand(65, 90)) . rand(1000, 9999))),
+                Forms\Components\Select::make('users_id')
+                    ->required()
+                    ->relationship('users', 'name'),
                 Forms\Components\FileUpload::make('image')
                     ->image()
-                    ->required(),
-                Forms\Components\TextInput::make('qr_value')
                     ->required()
-                    ->maxLength(255),
-                Forms\Components\TextInput::make('users_id')
-                    ->required()
-                    ->numeric(),
+                    ->columnSpanFull(),
             ]);
     }
 
@@ -44,12 +46,12 @@ class BarcodeResource extends Resource
             ->columns([
                 Tables\Columns\TextColumn::make('table_number')
                     ->searchable(),
-                Tables\Columns\ImageColumn::make('image'),
+                // Tables\Columns\ImageColumn::make('image'),
                 Tables\Columns\TextColumn::make('qr_value')
                     ->searchable(),
-                Tables\Columns\TextColumn::make('users_id')
-                    ->numeric()
-                    ->sortable(),
+                Tables\Columns\ImageColumn::make('image'),
+                Tables\Columns\TextColumn::make('users.name')
+                    ->searchable(),
                 Tables\Columns\TextColumn::make('created_at')
                     ->dateTime()
                     ->sortable()
@@ -63,7 +65,17 @@ class BarcodeResource extends Resource
                 //
             ])
             ->actions([
-                Tables\Actions\EditAction::make(),
+                Tables\Actions\Action::make('download')
+                    ->label('Download QR Code')
+                    ->icon('heroicon-o-arrow-down-tray')
+                    ->action(function ($record) {
+                        $filePath = storage_path('app/public/' . $record->image);
+                        if (file_exists($filePath)) {
+                            return response()->download($filePath);
+                        }
+
+                        session()->flash('error', 'QR code image not found.');
+                    }),
             ])
             ->bulkActions([
                 Tables\Actions\BulkActionGroup::make([
@@ -83,7 +95,7 @@ class BarcodeResource extends Resource
     {
         return [
             'index' => Pages\ListBarcodes::route('/'),
-            'create' => Pages\CreateBarcode::route('/create'),
+            'create' => Pages\CreateQr::route('/create'),
             'edit' => Pages\EditBarcode::route('/{record}/edit'),
         ];
     }
